@@ -21,7 +21,6 @@ function lookup({searchString}) {
   cleaned = cleanContent(searchString);
   const findings = {};
   for (const word of cleaned) {
-    console.log("Looking up word: " + word);
     const records = new Set(db[word] ?? []);
     for (const record of records) {
       const finding = findings[record.url] ?? {
@@ -70,10 +69,10 @@ const actions = {
   "lookup": lookup,
 }
 
-browser.runtime.onMessage.addListener((message) => {
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "index_main_page") {
     index(message.args)
   } else if (message.type === "lookup") {
-    const results = lookup(message.args);
+    sendResponse(lookup(message.args));
   }
 })
