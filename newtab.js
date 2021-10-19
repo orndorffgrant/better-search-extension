@@ -7,7 +7,7 @@ search.onchange = () => {
         searchString: search.value
     },
   }).then((res) => {
-      const linksarray = res.map(r => `<div><a target="_blank" href="${r.url}">${r.title}</a></div>`)
+      const linksarray = res.map(r => `<div><a href="${r.url}">${r.title}</a></div>`)
       results.innerHTML = linksarray.reduce((s, i) => s + i)
   })
 }
