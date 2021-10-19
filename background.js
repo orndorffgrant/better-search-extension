@@ -1,4 +1,52 @@
-const db = {};
+let db = null;
+async function getDb() {
+  return new Promise((resolve, reject) => {
+    if (db) {
+      resolve(db);
+    }
+    const request = indexedDB.open("index", 1);
+    request.onerror = function(event) {
+      console.error("oof");
+      reject(event);
+    };
+    request.onupgradeneeded = function(event) {
+      const db = event.target.result;
+      const invertedIndex = db.createObjectStore("inverted_index", { keyPath: "term" });
+      const urls = db.createObjectStore("urls", { keyPath: "url" });
+    };
+    request.onsuccess = function(event) {
+      db = event.target.result;
+      resolve(db);
+    };
+  })
+}
+
+async function getUrlsForTerm(term) {
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction("inverted_index").objectStore("inverted_index").get(term);
+    request.onerror = function(event) {
+      reject(event.target)
+    };
+    request.onsuccess = function(event) {
+      resolve(event.target.result ?? { term, urls: [] });
+    };
+  });
+}
+
+async function setUrlsForTerm(term, urls) {
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction("inverted_index", "readwrite").objectStore("inverted_index").put({ term, urls });
+    request.onerror = function(event) {
+      reject(event.target)
+    };
+    request.onsuccess = function(event) {
+      resolve(event.target);
+    };
+  });
+}
+
 const punctuationRegex = /[.,\\\/#!$%\^&\*;:{}\+=\-_`~()\[\]@\{\}'"<>\?]/g;
 const whitespace = /\s+/g;
 const unimportantWords = new Set([
@@ -16,12 +64,12 @@ function cleanContent(content) {
   return punctuationRemoved.replace(whitespace, " ").toLowerCase().split(" ").filter(word => word.length > 2 && !unimportantWords.has(word));
 }
 
-function lookup({searchString}) {
+async function lookup({searchString}) {
   console.log("Looking up: " + searchString);
   cleaned = cleanContent(searchString);
   const findings = {};
   for (const word of cleaned) {
-    const records = new Set(db[word] ?? []);
+    const records = (await getUrlsForTerm(word)).urls;
     for (const record of records) {
       const finding = findings[record.url] ?? {
         url: record.url,
@@ -34,10 +82,11 @@ function lookup({searchString}) {
   }
   const findingsArr = Object.keys(findings).map(url => findings[url]);
   findingsArr.sort((a, b) => b.count - a.count);
+  console.log("findings" + findingsArr)
   return findingsArr;
 }
 
-function index({
+async function index({
   url,
   title,
   content,
@@ -54,13 +103,13 @@ function index({
   }
 
   for (word of Object.keys(contentDb)) {
-    const records = db[word] ?? [];
+    const records = (await getUrlsForTerm(word)).urls;
     records.push({
       ...contentDb[word],
       url,
       title,
     });
-    db[word] = records;
+    await setUrlsForTerm(word, records);
   }
 }
 
@@ -70,7 +119,7 @@ const actions = {
 }
 
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "index_main_page") {
+  if (message.type === "index") {
     index(message.args)
   } else if (message.type === "lookup") {
     sendResponse(lookup(message.args));

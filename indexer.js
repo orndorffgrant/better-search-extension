@@ -1,5 +1,5 @@
 browser.runtime.sendMessage({
-  type: "index_main_page",
+  type: "index",
   args: {
     url: document.URL,
     title: document.title,

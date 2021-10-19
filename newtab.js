@@ -10,4 +10,4 @@ search.onchange = () => {
       const linksarray = res.map(r => `<div><a href="${r.url}">${r.title}</a></div>`)
       results.innerHTML = linksarray.reduce((s, i) => s + i)
   })
-}
+};
