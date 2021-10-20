@@ -26,6 +26,8 @@ async function getUrlsForTerm(term) {
   return new Promise((resolve, reject) => {
     const request = db.transaction("inverted_index").objectStore("inverted_index").get(term);
     request.onerror = function(event) {
+      console.error("getUrlsForTerm error");
+      console.error(event);
       reject(event.target)
     };
     request.onsuccess = function(event) {
@@ -39,7 +41,9 @@ async function setUrlsForTerm(term, urls) {
   return new Promise((resolve, reject) => {
     const request = db.transaction("inverted_index", "readwrite").objectStore("inverted_index").put({ term, urls });
     request.onerror = function(event) {
-      reject(event.target)
+      console.error("setUrlsForTerm error");
+      console.error(event);
+      reject(event.target);
     };
     request.onsuccess = function(event) {
       resolve(event.target);
@@ -119,9 +123,5 @@ const actions = {
 }
 
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "index") {
-    index(message.args)
-  } else if (message.type === "lookup") {
-    sendResponse(lookup(message.args));
-  }
-})
+  sendResponse(actions[message.type](message.args));
+});

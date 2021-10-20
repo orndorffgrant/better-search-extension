@@ -1,3 +1,29 @@
-body {
+html, body {
+    margin: 0;
+    padding: 0;
     background-color: lavender;
+}
+.searchbar-header {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+.searchbar {
+    width: 50%;
+}
+.link-container {
+    width: 100%;
+    max-width: 1024px;
+    margin: 0 auto;
+    background-color: white;
+    border-color: purple;
+    border-width: 2px;
+    border-style: solid;
+}
+.link {
+
+}
+.preview {
+    height: 200px;
+    width: 100%;
 }

@@ -7,8 +7,15 @@
   </head>
 
 <body>
-  <input placeholder="search" id="search" name="search" autofocus>
+  <div class="searchbar-header">
+    <input class="searchbar" placeholder="search" id="search" name="search" autofocus>
+  </div>
   <div id="results"></div>
+  <template id="result">
+    <div class="link-container">
+      <a class="link"></a>
+    </div>
+  </template>
   <script src="newtab.js"></script>
 </body>
 
