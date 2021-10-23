@@ -24,5 +24,15 @@
   },
   "chrome_url_overrides": {
     "newtab": "newtab.html"
+  },
+  "options_ui": {
+    "browser_style": false,
+    "open_in_tab": true,
+    "page": "newtab.html"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "better-search-extension@orndorffgrant"
+    }
   }
 }
