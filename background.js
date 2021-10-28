@@ -35,13 +35,41 @@ async function getUrlsForTerm(term) {
     };
   });
 }
-
 async function setUrlsForTerm(term, urls) {
   const db = await getDb();
   return new Promise((resolve, reject) => {
     const request = db.transaction("inverted_index", "readwrite").objectStore("inverted_index").put({ term, urls });
     request.onerror = function(event) {
       console.error("setUrlsForTerm error");
+      console.error(event);
+      reject(event.target);
+    };
+    request.onsuccess = function(event) {
+      resolve(event.target);
+    };
+  });
+}
+
+async function retrievePage(url) {
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction("urls").objectStore("urls").get(url);
+    request.onerror = function(event) {
+      console.error("retrievePage error");
+      console.error(event);
+      reject(event.target)
+    };
+    request.onsuccess = function(event) {
+      resolve(event.target.result);
+    };
+  });
+}
+async function storePage(url, title, content) {
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction("urls", "readwrite").objectStore("urls").put({ url, title, content });
+    request.onerror = function(event) {
+      console.error("storePage error");
       console.error(event);
       reject(event.target);
     };
@@ -68,9 +96,29 @@ function cleanContent(content) {
   return punctuationRemoved.replace(whitespace, " ").toLowerCase().split(" ").filter(word => word.length > 2 && !unimportantWords.has(word));
 }
 
-const subWordStopChars = [",",".","<",">","/","?",":",";","'",'"',"[","{","]","}","|","\\","~","`","!","@","#","$","%","^","&","*","(",")","-","_","+","="," "];
-const fullWordStopChars = [",",".","?","'",'"',"[","{","]","}","`","!","(",")"," "];
+const whitespaceChars = [" ","\n","\t","\r"];
+const punctuationChars = [",",".","<",">","/","?",":",";","'",'"',"[","{","]","}","|","\\","~","`","!","@","#","$","%","^","&","*","(",")","-","_","+","="];
+const subWordStopChars = whitespaceChars + punctuationChars;
+const fullWordStopChars = whitespaceChars + [",",".","?","'",'"',"[","{","]","}","`","!","(",")"];
+function stripPunctuation(word) {
+  let beginIndex = 0;
+  for (; beginIndex < word.length; beginIndex++) {
+    if (!subWordStopChars.includes(word[beginIndex])) {
+      break;
+    }
+  }
+  let endIndex = word.length - 1;
+  for (; endIndex >= 0; endIndex--) {
+    if (!subWordStopChars.includes(word[endIndex])) {
+      break;
+    }
+  }
+  return word.substring(beginIndex, endIndex + 1);
+}
 function parseCorpus(corpus) {
+  // TODO
+  // don't include single character words
+  corpus = corpus.toLowerCase() + " ";
   const fullWords = [];
   let currentFullWord = {
     startIndex: 0,
@@ -86,19 +134,111 @@ function parseCorpus(corpus) {
   // include punctuation in words, but when appending, append with and without punctuation"
   for (let i = 0; i < corpus.length; i++) {
     let currChar = corpus[i];
-    if (currentFullWord.word === "") {
+    if (fullWordStopChars.includes(currChar)) {
+      // scenarios
+      // 1. beginning word
+      // 1.1 whitespace -> skip, don't add it
+      // 1.2 nonwhitespace -> go ahead and add it
+      // 2. ending word
+      // 2.1 whitespace -> don't add it but finish
+      // 2.2 nonwhitespace -> add it and finish
+      if (currentFullWord.word === "") {
+        if (whitespaceChars.includes(currChar)) {
+          continue;
+        } else {
+          currentFullWord.startIndex = i;
+          currentFullWord.word = currentFullWord.word + currChar;
+        }
+      } else {
+        if (!whitespaceChars.includes(currChar)) {
+          currentFullWord.word = currentFullWord.word + currChar;
+        }
+        currentFullWord.endIndex = i;
+
+        const strippedWord = stripPunctuation(currentFullWord.word);
+        const currentFullWordWithoutPunctuation = {
+          startIndex: currentFullWord.startIndex,
+          endIndex: currentFullWord.endIndex,
+          word: strippedWord,
+        }
+        const currentFullWordStemmed = {
+          startIndex: currentFullWord.startIndex,
+          endIndex: currentFullWord.endIndex,
+          word: stemmer(strippedWord),
+        }
+        fullWords.push({
+          raw: currentFullWord,
+          stripped: currentFullWordWithoutPunctuation,
+          stemmed: currentFullWordStemmed,
+        });
+        currentFullWord = {
+          startIndex: i,
+          endIndex: i,
+          word: "",
+        };
+      }
+    } else if (currentFullWord.word === "") {
       currentFullWord.startIndex = i;
-      currentFullWord.word.push(currChar);
-    } else if (fullWordStopChars.includes(currentFullWord)) {
-      // TODO append and create new word
+      currentFullWord.word = currentFullWord.word + currChar;
     } else { // not the beginning or the end, so just push the char
-      currentFullWord.word.push(currChar);
+      currentFullWord.word = currentFullWord.word + currChar;
     }
-    if (currentSubWord.word === "") {
+
+    // same as above chunk but for sub word
+    if (subWordStopChars.includes(currChar)) {
+      if (currentSubWord.word === "") {
+        if (whitespaceChars.includes(currChar)) {
+          continue;
+        } else {
+          currentSubWord.startIndex = i;
+          currentSubWord.word = currentSubWord.word + currChar;
+        }
+      } else {
+        if (!whitespaceChars.includes(currChar)) {
+          currentSubWord.word = currentSubWord.word + currChar;
+        }
+        currentSubWord.endIndex = i;
+
+        const strippedWord = stripPunctuation(currentSubWord.word);
+        const currentSubWordWithoutPunctuation = {
+          startIndex: currentSubWord.startIndex,
+          endIndex: currentSubWord.endIndex,
+          word: strippedWord,
+        }
+        const currentSubWordStemmed = {
+          startIndex: currentSubWord.startIndex,
+          endIndex: currentSubWord.endIndex,
+          word: stemmer(strippedWord),
+        }
+        subWords.push({
+          raw: currentSubWord,
+          stripped: currentSubWordWithoutPunctuation,
+          stemmed: currentSubWordStemmed,
+        });
+        currentSubWord = {
+          startIndex: i,
+          endIndex: i,
+          word: "",
+        };
+      }
+    } else if (currentSubWord.word === "") {
       currentSubWord.startIndex = i;
-      currentSubWord.word.push(currChar);
-    } // TODO
+      currentSubWord.word = currentSubWord.word + currChar;
+    } else { // not the beginning or the end, so just push the char
+      currentSubWord.word = currentSubWord.word + currChar;
+    }
   }
+  return {
+    subWords, fullWords
+  }
+}
+function normalizeUrl(url_string) {
+  // TODO filter out known metrics/tracking serach params
+  const url = new URL(url_string)
+  url.username = "";
+  url.password = "";
+  url.hash = "";
+  return url.href
 }
 
 async function lookup({searchString}) {
@@ -129,6 +269,9 @@ async function index({
   content,
 }) {
   console.log("\nIndexing: " + url + "\n" + title);
+  const normalizedUrl = normalizeUrl(url);
+  // TODO use parseCorpus
+  // TODO store the corpus under the normalized url
   const cleaned = cleanContent(content);
   const contentDb = {}
   for (const word of cleaned) {
@@ -143,11 +286,12 @@ async function index({
     const records = (await getUrlsForTerm(word)).urls;
     records.push({
       ...contentDb[word],
-      url,
+      normalizedUrl,
       title,
     });
     await setUrlsForTerm(word, records);
   }
+  await storePage(normalizeUrl, title, content);
 }
 
 const actions = {
