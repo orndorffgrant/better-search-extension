@@ -68,6 +68,39 @@ function cleanContent(content) {
   return punctuationRemoved.replace(whitespace, " ").toLowerCase().split(" ").filter(word => word.length > 2 && !unimportantWords.has(word));
 }
 
+const subWordStopChars = [",",".","<",">","/","?",":",";","'",'"',"[","{","]","}","|","\\","~","`","!","@","#","$","%","^","&","*","(",")","-","_","+","="," "];
+const fullWordStopChars = [",",".","?","'",'"',"[","{","]","}","`","!","(",")"," "];
+function parseCorpus(corpus) {
+  const fullWords = [];
+  let currentFullWord = {
+    startIndex: 0,
+    endIndex: 0,
+    word: "",
+  };
+  const subWords = [];
+  let currentSubWord = {
+    startIndex: 0,
+    endIndex: 0,
+    word: "",
+  };
+  // include punctuation in words, but when appending, append with and without punctuation"
+  for (let i = 0; i < corpus.length; i++) {
+    let currChar = corpus[i];
+    if (currentFullWord.word === "") {
+      currentFullWord.startIndex = i;
+      currentFullWord.word.push(currChar);
+    } else if (fullWordStopChars.includes(currentFullWord)) {
+      // TODO append and create new word
+    } else { // not the beginning or the end, so just push the char
+      currentFullWord.word.push(currChar);
+    }
+    if (currentSubWord.word === "") {
+      currentSubWord.startIndex = i;
+      currentSubWord.word.push(currChar);
+    } // TODO
+  }
+}
+
 async function lookup({searchString}) {
   console.log("Looking up: " + searchString);
   cleaned = cleanContent(searchString);

@@ -20,7 +20,10 @@
     }
   ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "stemmer.js",
+      "background.js"
+    ]
   },
   "chrome_url_overrides": {
     "newtab": "newtab.html"
