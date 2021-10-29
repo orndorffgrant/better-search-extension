@@ -18,6 +18,8 @@ const onchange = () => {
         a.innerText = result.title;
         const urlspan = resultElement.querySelector(".link");
         urlspan.innerText = result.url;
+        const snippet = resultElement.querySelector(".snippet");
+        snippet.innerText = result.snippet;
         resultsContainer.appendChild(resultElement);
       })
     } else {

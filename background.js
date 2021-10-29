@@ -258,41 +258,107 @@ function deduplicateWords(words) {
   return deduplicated;
 }
 
-async function lookup({searchString}) {
-  console.log("Looking up: " + searchString);
-  const { subWords, fullWords } = parseCorpus(content);
-
-  // const findings = {};
-  // for (const subWord of subWords) {
-  //   const uniqueWords = deduplicateWords([subWord.raw, subWord.stripped, subWord.stemmed]);
-  //   for (const uniqueWord of uniqueWords) {
-  //     const record = contentDb[uniqueWord.word] ?? {
-  //       occurences: [],
-  //     };
-  //     record.occurences.push(uniqueWord);
-  //     contentDb[word] = record;
-  //   }
-  // }
-
-
-  cleaned = cleanContent(searchString);
+async function _lookupParsedCorpusWords(words) {
+  const wordsAlreadyFound = [];
   const findings = {};
-  for (const word of cleaned) {
-    const records = (await getUrlsForTerm(word)).urls;
-    for (const record of records) {
-      const finding = findings[record.url] ?? {
-        url: record.url,
-        title: record.title,
-        count: 0,
-      };
-      finding.count = finding.count + record.count;
-      findings[record.url] = finding;
+  for (const word of words) {
+    const uniqueWords = deduplicateWords([word.raw, word.stripped, word.stemmed]);
+    for (const uniqueWord of uniqueWords) {
+      if (wordsAlreadyFound.includes(uniqueWord.word)) {
+        continue;
+      }
+      console.log({
+        uniqueWord
+      })
+      wordsAlreadyFound.push(uniqueWord.word);
+      const recordsWhole = await getUrlsForTerm(uniqueWord.word);
+      const records = recordsWhole.urls;
+      console.log({
+        records
+      })
+      for (const record of records) {
+        const { url, occurrences } = record;
+        const finding = findings[url] ?? {
+          url,
+          occurrences: [],
+        };
+        finding.occurrences = finding.occurrences.concat(occurrences);
+        findings[url] = finding;
+      }
     }
   }
+  return findings;
+}
+const RAW_MULTIPLIER = 100;
+const STRIPPED_MULTIPLIER = 90;
+const STEMMED_MULTIPLIER = 80;
+const MULTIPLIERS = {
+  "raw": RAW_MULTIPLIER,
+  "stripped": STRIPPED_MULTIPLIER,
+  "stemmed": STEMMED_MULTIPLIER,
+}
+async function lookup({searchString}) {
+  console.log("Looking up: " + searchString);
+  const { subWords, fullWords } = parseCorpus(searchString);
+
+  // TODO when we do bigrams the sub vs full will matter, but right now we shuold just combine
+  const allRawWords = new Set();
+  const wordsToLookup = [];
+  for (const w of fullWords) {
+    if (allRawWords.has(w.raw.word)) {
+      continue;
+    }
+    allRawWords.add(w.raw.word);
+    wordsToLookup.push(w);
+  }
+  for (const w of subWords) {
+    if (allRawWords.has(w.raw.word)) {
+      continue;
+    }
+    allRawWords.add(w.raw.word);
+    wordsToLookup.push(w);
+  }
+
+  console.info({
+    wordsToLookup
+  })
+
+  const findings = await _lookupParsedCorpusWords(wordsToLookup);
+  console.info({
+    findings
+  })
   const findingsArr = Object.keys(findings).map(url => findings[url]);
-  findingsArr.sort((a, b) => b.count - a.count).slice(0, 10);
-  console.log("findings" + JSON.stringify(findingsArr));
-  return findingsArr;
+
+  const findingsRanked = findingsArr.map(f => {
+    let score = 0;
+    for (const occurrence of f.occurrences) {
+      score += MULTIPLIERS[occurrence.type]
+    }
+    return {
+      ...f,
+      score
+    }
+  }).sort((a, b) => b.score - a.score).slice(0, 10);
+  console.info({
+    findingsRanked
+  })
+
+  for (const finding of findingsRanked) {
+    const page = await retrievePage(finding.url);
+    const earliestOccurrence = finding.occurrences.reduce((earliestIndex, currFinding) => {
+      if (currFinding.startIndex < earliestIndex) {
+        return currFinding.startIndex;
+      }
+      return earliestIndex;
+    }, page.content.length);
+    finding.snippet = page.content.substring(earliestOccurrence, Math.min(earliestOccurrence + 200, page.content.length)).replaceAll("\n", " ");
+    finding.snippetOffset = earliestOccurrence;
+    finding.title = page.title;
+  }
+  console.info({
+    findingsRanked
+  })
+  return findingsRanked;
 }
 
 function _indexParsedCorpusWords(words) {
@@ -301,12 +367,16 @@ function _indexParsedCorpusWords(words) {
     const uniqueWords = deduplicateWords([word.raw, word.stripped, word.stemmed]);
     for (const uniqueWord of uniqueWords) {
       const record = contentDb[uniqueWord.word] ?? {
-        occurences: [],
+        occurrences: [],
       };
-      record.occurences.push(uniqueWord);
-      contentDb[word] = record;
+      record.occurrences.push(uniqueWord);
+      contentDb[uniqueWord.word] = record;
     }
   }
+  console.info({
+    inside: true,
+    contentDb
+  })
   return contentDb;
 }
 async function index({
@@ -317,11 +387,19 @@ async function index({
   console.log("\nIndexing: " + url + "\n" + title);
   const normalizedUrl = normalizeUrl(url);
   const { subWords, fullWords } = parseCorpus(content);
+  console.info({
+    subWords,
+    fullWords,
+  })
 
+  // TODO handle duplicates between subWords and fullWords better?
   const contentDb = {
     ..._indexParsedCorpusWords(subWords),
-    ..._indexParsedCorpusWords(fullSubWords),
+    ..._indexParsedCorpusWords(fullWords),
   }
+  console.info({
+    contentDb
+  })
   for (word of Object.keys(contentDb)) {
     const records = (await getUrlsForTerm(word)).urls;
     records.push({
@@ -330,7 +408,7 @@ async function index({
     });
     await setUrlsForTerm(word, records);
   }
-  await storePage(normalizeUrl, title, content);
+  await storePage(normalizedUrl, title, content);
 }
 
 const actions = {
