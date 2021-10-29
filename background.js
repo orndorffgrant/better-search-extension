@@ -79,23 +79,6 @@ async function storePage(url, title, content) {
   });
 }
 
-const punctuationRegex = /[.,\\\/#!$%\^&\*;:{}\+=\-_`~()\[\]@\{\}'"<>\?]/g;
-const whitespace = /\s+/g;
-const unimportantWords = new Set([
-  "",
-  "a",
-  "and",
-  "but",
-  "if",
-  "the",
-  "then",
-])
-
-function cleanContent(content) {
-  const punctuationRemoved = content.replace(punctuationRegex, "") 
-  return punctuationRemoved.replace(whitespace, " ").toLowerCase().split(" ").filter(word => word.length > 2 && !unimportantWords.has(word));
-}
-
 const whitespaceChars = [" ","\n","\t","\r"];
 const punctuationChars = [",",".","<",">","/","?",":",";","'",'"',"[","{","]","}","|","\\","~","`","!","@","#","$","%","^","&","*","(",")","-","_","+","="];
 const subWordStopChars = whitespaceChars + punctuationChars;
@@ -239,6 +222,8 @@ function parseCorpus(corpus) {
     subWords, fullWords
   }
 }
+
+
 function normalizeUrl(url_string) {
   // TODO filter out known metrics/tracking serach params
   const url = new URL(url_string)
@@ -247,6 +232,8 @@ function normalizeUrl(url_string) {
   url.hash = "";
   return url.href
 }
+
+
 function deduplicateWords(words) {
   const deduplicated = [];
   for (const word of words) {
@@ -289,6 +276,8 @@ async function _lookupParsedCorpusWords(words) {
   }
   return findings;
 }
+
+// bigrams will get bigger multipliers
 const RAW_MULTIPLIER = 100;
 const STRIPPED_MULTIPLIER = 90;
 const STEMMED_MULTIPLIER = 80;
@@ -351,7 +340,7 @@ async function lookup({searchString}) {
       }
       return earliestIndex;
     }, page.content.length);
-    finding.snippet = page.content.substring(earliestOccurrence, Math.min(earliestOccurrence + 200, page.content.length)).replaceAll("\n", " ");
+    finding.snippet = page.content.substring(earliestOccurrence, Math.min(earliestOccurrence + 300, page.content.length)).replaceAll("\n", " ");
     finding.snippetOffset = earliestOccurrence;
     finding.title = page.title;
   }
@@ -386,6 +375,9 @@ async function index({
 }) {
   console.log("\nIndexing: " + url + "\n" + title);
   const normalizedUrl = normalizeUrl(url);
+  // TODO if we've already indexed this page...
+  // if its the same, skip
+  // if its different, purge and then index
   const { subWords, fullWords } = parseCorpus(content);
   console.info({
     subWords,
