@@ -1,8 +1,20 @@
 const search = document.getElementById("search");
 const resultsContainer = document.getElementById("results");
 const resultTemplate = document.querySelector("#result");
+const suggestionsContainer = document.getElementById("suggestions");
+const suggestionTemplate = document.querySelector("#suggestion");
 
 const onchange = () => {
+
+  // Suggest internet search
+  suggestionsContainer.innerHTML = "";
+  const suggestionElement = suggestionTemplate.content.cloneNode(true);
+  const a = suggestionElement.querySelector(".suggestion-link");
+  a.href = `https://duckduckgo.com/?q=${search.value}`;
+  a.innerText = `Search DuckDuckGo for "${search.value}"`
+  suggestionsContainer.appendChild(suggestionElement);
+
+  // Search history
   browser.runtime.sendMessage({
     type: "lookup",
     args: {

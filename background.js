@@ -234,14 +234,22 @@ function normalizeUrl(url_string) {
 }
 
 
+let problemLog = false;
+
 function deduplicateWords(words) {
   const deduplicated = [];
+  problemLog && console.info({
+    deduplicating: words
+  })
   for (const word of words) {
     const found = deduplicated.find(w => w.word === word.word);
     if (!found) {
       deduplicated.push(word);
     }
   }
+  problemLog && console.info({
+    deduplicated
+  })
   return deduplicated;
 }
 
@@ -319,10 +327,17 @@ async function lookup({searchString}) {
   const findingsArr = Object.keys(findings).map(url => findings[url]);
 
   const findingsRanked = findingsArr.map(f => {
+    const wordsToLookupThatWereFound = new Set();
     let score = 0;
     for (const occurrence of f.occurrences) {
+      if (!occurrence) {
+        // TODO why is occurrence undefined sometimes?
+        continue;
+      }
       score += MULTIPLIERS[occurrence.type]
+      wordsToLookupThatWereFound.add(occurrence.word);
     }
+    score *= wordsToLookupThatWereFound.size;
     return {
       ...f,
       score
@@ -335,6 +350,10 @@ async function lookup({searchString}) {
   for (const finding of findingsRanked) {
     const page = await retrievePage(finding.url);
     const earliestOccurrence = finding.occurrences.reduce((earliestIndex, currFinding) => {
+      if (!currFinding) {
+        // TODO why is occurrence undefined sometimes?
+        return earliestIndex;
+      }
       if (currFinding.startIndex < earliestIndex) {
         return currFinding.startIndex;
       }
@@ -353,8 +372,21 @@ async function lookup({searchString}) {
 function _indexParsedCorpusWords(words) {
   const contentDb = {}
   for (const word of words) {
+    if (!word) {
+      console.warn("null word")
+      continue;
+    }
+    if (!word.raw || !word.stripped || !word.stemmed) {
+      console.warn("partially null word")
+      console.warn({ word })
+      continue;
+    }
     const uniqueWords = deduplicateWords([word.raw, word.stripped, word.stemmed]);
     for (const uniqueWord of uniqueWords) {
+      if (!uniqueWord) {
+        console.warn("null uniqueWord")
+        continue;
+      }
       const record = contentDb[uniqueWord.word] ?? {
         occurrences: [],
       };
@@ -375,6 +407,9 @@ async function index({
 }) {
   console.log("\nIndexing: " + url + "\n" + title);
   const normalizedUrl = normalizeUrl(url);
+  // if (normalizedUrl.indexOf("python.org") > 0) {
+  //   problemLog = true;
+  // }
   // TODO if we've already indexed this page...
   // if its the same, skip
   // if its different, purge and then index
@@ -401,6 +436,7 @@ async function index({
     await setUrlsForTerm(word, records);
   }
   await storePage(normalizedUrl, title, content);
+  problemLog = false;
 }
 
 const actions = {
