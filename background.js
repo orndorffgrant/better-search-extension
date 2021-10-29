@@ -116,17 +116,18 @@ function stripPunctuation(word) {
   return word.substring(beginIndex, endIndex + 1);
 }
 function parseCorpus(corpus) {
-  // TODO
-  // don't include single character words
+  // TODO don't include single character words
   corpus = corpus.toLowerCase() + " ";
   const fullWords = [];
   let currentFullWord = {
+    type: "raw",
     startIndex: 0,
     endIndex: 0,
     word: "",
   };
   const subWords = [];
   let currentSubWord = {
+    type: "raw",
     startIndex: 0,
     endIndex: 0,
     word: "",
@@ -157,11 +158,13 @@ function parseCorpus(corpus) {
 
         const strippedWord = stripPunctuation(currentFullWord.word);
         const currentFullWordWithoutPunctuation = {
+          type: "stripped",
           startIndex: currentFullWord.startIndex,
           endIndex: currentFullWord.endIndex,
           word: strippedWord,
         }
         const currentFullWordStemmed = {
+          type: "stemmed",
           startIndex: currentFullWord.startIndex,
           endIndex: currentFullWord.endIndex,
           word: stemmer(strippedWord),
@@ -172,6 +175,7 @@ function parseCorpus(corpus) {
           stemmed: currentFullWordStemmed,
         });
         currentFullWord = {
+          type: "raw",
           startIndex: i,
           endIndex: i,
           word: "",
@@ -201,11 +205,13 @@ function parseCorpus(corpus) {
 
         const strippedWord = stripPunctuation(currentSubWord.word);
         const currentSubWordWithoutPunctuation = {
+          type: "stripped",
           startIndex: currentSubWord.startIndex,
           endIndex: currentSubWord.endIndex,
           word: strippedWord,
         }
         const currentSubWordStemmed = {
+          type: "stemmed",
           startIndex: currentSubWord.startIndex,
           endIndex: currentSubWord.endIndex,
           word: stemmer(strippedWord),
@@ -216,6 +222,7 @@ function parseCorpus(corpus) {
           stemmed: currentSubWordStemmed,
         });
         currentSubWord = {
+          type: "raw",
           startIndex: i,
           endIndex: i,
           word: "",
@@ -240,9 +247,34 @@ function normalizeUrl(url_string) {
   url.hash = "";
   return url.href
 }
+function deduplicateWords(words) {
+  const deduplicated = [];
+  for (const word of words) {
+    const found = deduplicated.find(w => w.word === word.word);
+    if (!found) {
+      deduplicated.push(word);
+    }
+  }
+  return deduplicated;
+}
 
 async function lookup({searchString}) {
   console.log("Looking up: " + searchString);
+  const { subWords, fullWords } = parseCorpus(content);
+
+  // const findings = {};
+  // for (const subWord of subWords) {
+  //   const uniqueWords = deduplicateWords([subWord.raw, subWord.stripped, subWord.stemmed]);
+  //   for (const uniqueWord of uniqueWords) {
+  //     const record = contentDb[uniqueWord.word] ?? {
+  //       occurences: [],
+  //     };
+  //     record.occurences.push(uniqueWord);
+  //     contentDb[word] = record;
+  //   }
+  // }
+
+
   cleaned = cleanContent(searchString);
   const findings = {};
   for (const word of cleaned) {
@@ -258,11 +290,25 @@ async function lookup({searchString}) {
     }
   }
   const findingsArr = Object.keys(findings).map(url => findings[url]);
-  findingsArr.sort((a, b) => b.count - a.count);
-  console.log("findings" + findingsArr)
+  findingsArr.sort((a, b) => b.count - a.count).slice(0, 10);
+  console.log("findings" + JSON.stringify(findingsArr));
   return findingsArr;
 }
 
+function _indexParsedCorpusWords(words) {
+  const contentDb = {}
+  for (const word of words) {
+    const uniqueWords = deduplicateWords([word.raw, word.stripped, word.stemmed]);
+    for (const uniqueWord of uniqueWords) {
+      const record = contentDb[uniqueWord.word] ?? {
+        occurences: [],
+      };
+      record.occurences.push(uniqueWord);
+      contentDb[word] = record;
+    }
+  }
+  return contentDb;
+}
 async function index({
   url,
   title,
@@ -270,24 +316,17 @@ async function index({
 }) {
   console.log("\nIndexing: " + url + "\n" + title);
   const normalizedUrl = normalizeUrl(url);
-  // TODO use parseCorpus
-  // TODO store the corpus under the normalized url
-  const cleaned = cleanContent(content);
-  const contentDb = {}
-  for (const word of cleaned) {
-    const record = contentDb[word] ?? {
-      count: 0
-    };
-    record.count = record.count + 1;
-    contentDb[word] = record;
-  }
+  const { subWords, fullWords } = parseCorpus(content);
 
+  const contentDb = {
+    ..._indexParsedCorpusWords(subWords),
+    ..._indexParsedCorpusWords(fullSubWords),
+  }
   for (word of Object.keys(contentDb)) {
     const records = (await getUrlsForTerm(word)).urls;
     records.push({
       ...contentDb[word],
-      normalizedUrl,
-      title,
+      url: normalizedUrl,
     });
     await setUrlsForTerm(word, records);
   }
