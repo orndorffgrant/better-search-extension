@@ -1,3 +1,11 @@
+/*
+ * TODO:
+ * in lookup: occurrencesByWord for each url
+ * in lookup: sort by number of words found
+ * new feature: index bookmarks on creation, and save as bookmark (save history index as history)
+ * in lookup: separate bookmarks from history results
+ * in ui: separate bookmarks from history results
+ */
 let db = null;
 async function getDb() {
   return new Promise((resolve, reject) => {
